@@ -8,20 +8,24 @@ namespace SpotifyManager
     {
         static async Task Main(string[] args)
         {
+            AppDomain.CurrentDomain.UnhandledException += CurrentDomainOnUnhandledException;
+            
             Parser.Default.ParseArguments<Parameters>(args)
                 .WithParsed(p =>
                 {
                     Parameters.Current = p;
                 })
-                .WithNotParsed(errors =>
-                {
-                    Console.WriteLine(string.Join(",", errors));
-                    Environment.Exit(1);
-                });
+                .WithNotParsed(errors => throw new ArgumentException(string.Join(",", errors)));
 
             var auth = new SpotifyAuthenticator();
             var spotify = new Spotify(await auth.Auth());
             await spotify.ExportTracksToPlaylist();
+        }
+
+        private static void CurrentDomainOnUnhandledException(object sender, UnhandledExceptionEventArgs e)
+        {
+            Console.WriteLine(e);
+            Environment.Exit(1);
         }
     }
 }

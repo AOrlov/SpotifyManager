@@ -28,7 +28,7 @@ namespace SpotifyManager
 
             var userId = (await spotify.UserProfile.Current()).Id;
             
-            var playlistName = $"My Shazam Tracks - {DateTime.Now.Date.ToShortDateString()}";
+            var playlistName = Parameters.Current.PlaylistName ?? $"TOP Shazam Tracks - {DateTime.Now.Date.ToShortDateString()}";
 
             string playlistId = null;
 
@@ -62,7 +62,11 @@ namespace SpotifyManager
                 var result = await spotify.Search.Item(new SearchRequest(SearchRequest.Types.Track, song));
                 if (result.Tracks.Total == 0)
                 {
-                    result = await spotify.Search.Item(new SearchRequest(SearchRequest.Types.Track, song.Split("|")[1].Trim()));
+                    var songArtistPair = song.Split("|");
+                    if (songArtistPair.Count() > 1)
+                    {
+                        result = await spotify.Search.Item(new SearchRequest(SearchRequest.Types.Track, songArtistPair[1].Trim()));
+                    }
                 }
                 
                 if (result.Tracks.Total > 0)
