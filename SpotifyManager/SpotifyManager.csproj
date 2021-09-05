@@ -5,4 +5,11 @@
         <TargetFramework>net5.0</TargetFramework>
     </PropertyGroup>
 
+    <ItemGroup>
+      <PackageReference Include="CommandLineParser" Version="2.9.0-preview1" />
+      <PackageReference Include="morelinq" Version="3.3.2" />
+      <PackageReference Include="SpotifyAPI.Web" Version="6.2.1" />
+      <PackageReference Include="SpotifyAPI.Web.Auth" Version="6.2.1" />
+    </ItemGroup>
+
 </Project>

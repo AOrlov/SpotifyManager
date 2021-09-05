@@ -1,12 +1,27 @@
 ﻿using System;
+using System.Threading.Tasks;
+using CommandLine;
 
 namespace SpotifyManager
 {
-    class Program
+    internal static class Program
     {
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
+            Parser.Default.ParseArguments<Parameters>(args)
+                .WithParsed(p =>
+                {
+                    Parameters.Current = p;
+                })
+                .WithNotParsed(errors =>
+                {
+                    Console.WriteLine(string.Join(",", errors));
+                    Environment.Exit(1);
+                });
+
+            var auth = new SpotifyAuthenticator();
+            var spotify = new Spotify(await auth.Auth());
+            await spotify.ExportTracksToPlaylist();
         }
     }
 }
