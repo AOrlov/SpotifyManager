@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using MoreLinq;
 using SpotifyAPI.Web;
+using Swan;
 
 namespace SpotifyManager
 {
@@ -26,24 +28,11 @@ namespace SpotifyManager
                 return s.Contains(separator) ? s.Split(separator)[1] : s;
             }).Where(s => !string.IsNullOrWhiteSpace(s)); //author | track
 
-            var userId = (await spotify.UserProfile.Current()).Id;
             
             var playlistName = Parameters.Current.PlaylistName ?? $"TOP Shazam Tracks - {DateTime.Now.Date.ToShortDateString()}";
 
-            string playlistId = null;
+            string playlistId = await FindOrCreatePlaylist(spotify, playlistName);
 
-            var playlists = await spotify.Playlists.CurrentUsers();
-            await foreach (var playlist in spotify.Paginate(playlists))
-            {
-                if (playlist.Name == playlistName)
-                {
-                    playlistId = playlist.Id;
-                    break;
-                }
-            }
-
-            playlistId ??= (await spotify.Playlists.Create(userId, new PlaylistCreateRequest(playlistName))).Id;
-            
             var existingTracks = Enumerable.ToHashSet((await spotify.PaginateAll((await spotify.Playlists.Get(playlistId!)).Tracks!))
                     .Select(t =>
                     {
@@ -55,9 +44,9 @@ namespace SpotifyManager
                         };
                     }).Where(url => !string.IsNullOrEmpty(url)));
 
-            var urlsToAdd = new HashSet<string>();
-            
-            foreach (var song in input)
+            var urlsToAdd = new ConcurrentBag<string>();
+
+            var tasks = input.Select(async song =>
             {
                 var result = await spotify.Search.Item(new SearchRequest(SearchRequest.Types.Track, song));
                 if (result.Tracks.Total == 0)
@@ -65,10 +54,11 @@ namespace SpotifyManager
                     var songArtistPair = song.Split("|");
                     if (songArtistPair.Count() > 1)
                     {
-                        result = await spotify.Search.Item(new SearchRequest(SearchRequest.Types.Track, songArtistPair[1].Trim()));
+                        result = await spotify.Search.Item(new SearchRequest(SearchRequest.Types.Track,
+                            songArtistPair[1].Trim()));
                     }
                 }
-                
+
                 if (result.Tracks.Total > 0)
                 {
                     var url = result.Tracks.Items![0].Uri;
@@ -81,7 +71,9 @@ namespace SpotifyManager
                 {
                     Console.WriteLine($"Could not found {song}");
                 }
-            }
+            });
+            
+            await Task.WhenAll(tasks);
 
             if (urlsToAdd.Any())
             {                
@@ -97,6 +89,22 @@ namespace SpotifyManager
                 Console.WriteLine($"No tracks will be added to {playlistName} playlist.");
             }
             Console.WriteLine($"Export completed.");
+        }
+
+        private static async Task<string> FindOrCreatePlaylist(SpotifyClient spotify, string name)
+        {
+            var userId = (await spotify.UserProfile.Current()).Id;
+
+            var playlists = await spotify.Playlists.CurrentUsers();
+            await foreach (var playlist in spotify.Paginate(playlists))
+            {
+                if (playlist.Name == name)
+                {
+                    return playlist.Id;
+                }
+            }
+
+            return (await spotify.Playlists.Create(userId, new PlaylistCreateRequest(name))).Id;
         }
     }
 }
