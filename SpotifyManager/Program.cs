@@ -22,7 +22,8 @@ namespace SpotifyManager
 
             var auth = new SpotifyAuthenticator();
             var spotify = new Spotify(await auth.Auth());
-            await spotify.ExportTracksToPlaylist(ReadInputFile(Parameters.Current.InputFilePath));
+            var moderator = new PlaylistModerator();
+            await spotify.ExportTracksToPlaylist(ReadInputFile(Parameters.Current.InputFilePath), moderator);
         }
 
         private static void CurrentDomainOnUnhandledException(object sender, UnhandledExceptionEventArgs e)
