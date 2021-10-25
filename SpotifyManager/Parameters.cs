@@ -14,7 +14,7 @@ namespace SpotifyManager
         
         [Option('t', "template", Required = true, HelpText = @"Track template. Example: {Any} — {Artist} | {Track} will match abc — BODIEV | Караван")]
         public string Template { get; set; }
-
+        
         public static Parameters Current { get; set; }
     }
 }

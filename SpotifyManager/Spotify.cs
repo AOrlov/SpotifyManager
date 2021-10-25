@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,26 +18,28 @@ namespace SpotifyManager
             _accessToken = accessToken ?? throw new ArgumentNullException(nameof(accessToken));
         }
         
-        public async Task ExportTracksToPlaylist(IEnumerable<InputEntry> tracks)
+        public async Task ExportTracksToPlaylist(IEnumerable<InputEntry> tracks, PlaylistModerator moderator)
         {
             var spotify = new SpotifyClient(_accessToken);
             
             var playlistId = await FindOrCreatePlaylist(spotify, Parameters.Current.PlaylistName);
-            var existingTrackUrl = await GetAllTracksFromPlaylist(spotify, playlistId);
-            var newTrackUrls = await SearchTracks(tracks, spotify);
-            var urlsToAdd = newTrackUrls.Except(existingTrackUrl).ToArray();
+
+            var existingTracks = await GetAllTracksFromPlaylist(spotify, playlistId);
+            var newTracks = (await SearchTracks(tracks, spotify))
+                .Except(existingTracks, FullTrackComparer.Instance);
+            var moderatedTracks = (await moderator.ModerateAsync(newTracks)).ToArray();
             
-            foreach (var batch in urlsToAdd.Batch(100))
+            foreach (var batchOfUrls in moderatedTracks.Select(t => t.Uri).Batch(100))
             {
-                await spotify.Playlists.AddItems(playlistId!, new PlaylistAddItemsRequest(batch.ToList()));
+                await spotify.Playlists.AddItems(playlistId!, new PlaylistAddItemsRequest(batchOfUrls.ToList()));
             }
             
-            Console.WriteLine($"Export completed. {urlsToAdd.Length} tracks have been added to {Parameters.Current.PlaylistName}.");
+            Console.WriteLine($"Export completed. {moderatedTracks.Length} tracks have been added to {Parameters.Current.PlaylistName}.");
         }
 
-        private async Task<IEnumerable<string>> SearchTracks(IEnumerable<InputEntry> input, SpotifyClient spotify)
+        private async Task<IEnumerable<FullTrack>> SearchTracks(IEnumerable<InputEntry> input, SpotifyClient spotify)
         {
-            var urlsToAdd = new ConcurrentBag<string>();
+            var entriesToAdd = new ConcurrentBag<FullTrack>();
 
             var tasks = input.Select(async song =>
             {
@@ -51,8 +54,7 @@ namespace SpotifyManager
 
                 if (result.Tracks.Total > 0)
                 {
-                    var url = result.Tracks.Items![0].Uri;
-                    urlsToAdd.Add(url);
+                    entriesToAdd.Add(result.Tracks.Items![0]);
                 }
                 else
                 {
@@ -61,17 +63,17 @@ namespace SpotifyManager
             });
 
             await Task.WhenAll(tasks);
-            return urlsToAdd;
+            return entriesToAdd;
         }
 
-        private static async Task<IEnumerable<string>> GetAllTracksFromPlaylist(SpotifyClient spotify, string playlistId)
+        private static async Task<IEnumerable<FullTrack>> GetAllTracksFromPlaylist(SpotifyClient spotify, string playlistId)
         {
-            var tracks = new List<string>();
+            var tracks = new List<FullTrack>();
             await foreach (var track in spotify.Paginate((await spotify.Playlists.Get(playlistId)).Tracks!))
             {
                 if (track.Track.Type == ItemType.Track)
                 {
-                    tracks.Add(((FullTrack)track.Track).Uri);
+                    tracks.Add(((FullTrack)track.Track));
                 }
             }
 
