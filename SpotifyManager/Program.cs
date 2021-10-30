@@ -28,11 +28,10 @@ namespace SpotifyManager
 
         private static void CurrentDomainOnUnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
-            Console.WriteLine(e);
+            Console.WriteLine(e.ExceptionObject);
             Environment.Exit(1);
         }
-        
-        
+
         private static IEnumerable<InputEntry> ReadInputFile(string path)
         {
             foreach (var line in File.ReadAllLines(path))

@@ -24,10 +24,10 @@ namespace SpotifyManager
             
             var playlistId = await FindOrCreatePlaylist(spotify, Parameters.Current.PlaylistName);
 
-            var existingTracks = await GetAllTracksFromPlaylist(spotify, playlistId);
-            var newTracks = (await SearchTracks(tracks, spotify))
-                .Except(existingTracks, FullTrackComparer.Instance);
-            var moderatedTracks = (await moderator.ModerateAsync(newTracks)).ToArray();
+            var moderatedTracks = await SearchTracks(tracks, spotify)
+                .Except(GetAllTracksFromPlaylist(spotify, playlistId), FullTrackComparer.Instance)
+                .Moderate(moderator)
+                .ToArrayAsync();
             
             foreach (var batchOfUrls in moderatedTracks.Select(t => t.Uri).Batch(100))
             {
@@ -37,13 +37,11 @@ namespace SpotifyManager
             Console.WriteLine($"Export completed. {moderatedTracks.Length} tracks have been added to {Parameters.Current.PlaylistName}.");
         }
 
-        private async Task<IEnumerable<FullTrack>> SearchTracks(IEnumerable<InputEntry> input, SpotifyClient spotify)
+        private async IAsyncEnumerable<FullTrack> SearchTracks(IEnumerable<InputEntry> input, SpotifyClient spotify)
         {
-            var entriesToAdd = new ConcurrentBag<FullTrack>();
-
-            var tasks = input.Select(async song =>
+            await foreach (InputEntry song in input.ToAsyncEnumerable())
             {
-                var result = await spotify.Search.Item(new SearchRequest(SearchRequest.Types.Track, song.ToString()));
+                var result = await spotify.Search.Item(new SearchRequest(SearchRequest.Types.Track, $"{song.Artist} {song.Track}"));
                 if (result.Tracks.Total == 0)
                 {
                     if (!string.IsNullOrWhiteSpace(song.Track))
@@ -54,30 +52,24 @@ namespace SpotifyManager
 
                 if (result.Tracks.Total > 0)
                 {
-                    entriesToAdd.Add(result.Tracks.Items![0]);
+                    yield return result.Tracks.Items![0];
                 }
                 else
                 {
                     Console.WriteLine($"Could not found {song}");
                 }
-            });
-
-            await Task.WhenAll(tasks);
-            return entriesToAdd;
+            }
         }
 
-        private static async Task<IEnumerable<FullTrack>> GetAllTracksFromPlaylist(SpotifyClient spotify, string playlistId)
+        private static async IAsyncEnumerable<FullTrack> GetAllTracksFromPlaylist(SpotifyClient spotify, string playlistId)
         {
-            var tracks = new List<FullTrack>();
             await foreach (var track in spotify.Paginate((await spotify.Playlists.Get(playlistId)).Tracks!))
             {
                 if (track.Track.Type == ItemType.Track)
                 {
-                    tracks.Add(((FullTrack)track.Track));
+                    yield return (FullTrack)track.Track;
                 }
             }
-
-            return tracks;
         }
 
         private static async Task<string> FindOrCreatePlaylist(SpotifyClient spotify, string name)
