@@ -1,48 +1,62 @@
+using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using SpotifyAPI.Web;
 
 namespace SpotifyManager
 {
-    internal class PlaylistModerator
+    internal class PlaylistModerator : IModerator<FullTrack>
     {
-        public async Task<IEnumerable<FullTrack>> ModerateAsync(IEnumerable<FullTrack> inputTracks)
+        public async IAsyncEnumerable<FullTrack> ModerateAsync(IAsyncEnumerable<FullTrack> inputTracks)
         {
-            var tracks = inputTracks.ToDictionary(k => k.Id, t => t);
+            var tracks = await inputTracks.ToDictionaryAsync(k => k.Id, t => t);
 
-            string filePath = Path.GetTempFileName() + ".txt";
-            await using FileStream stream = new FileStream(filePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.ReadWrite, 4096, FileOptions.DeleteOnClose);
-            await using StreamWriter writer = new StreamWriter(stream);
-            foreach (var track in tracks.Values)
+            if (!tracks.Any())
             {
-                await writer.WriteLineAsync($"{track.Artists} | {track.Name}, | {track.Id}");
+                yield break;
             }
 
-            var process = Process.Start(
-                new ProcessStartInfo(filePath)
+            string filePath = Path.GetTempFileName() + ".txt";
+            await using FileStream stream = CreateFile(filePath);
+            await using (StreamWriter writer = new StreamWriter(stream, leaveOpen: true))
+            {
+                foreach (var track in tracks.Values)
                 {
-                    UseShellExecute = true,
-                });
+                    await writer.WriteLineAsync($"{string.Join(',', track.Artists.Select(a => a.Name))} | {track.Name}, | {track.Id}");
+                }
+            }
+            
+            OpenEditorAndWait(filePath);
 
-            process.WaitForExit();
-
-            using StreamReader reader = new StreamReader(stream);
-
-            List<FullTrack> filteredTracks = new List<FullTrack>();
+            using StreamReader reader = new StreamReader(filePath);
+            
             while (!reader.EndOfStream)
             {
                 var line = await reader.ReadLineAsync();
                 var id = line?.Split(" | ").Last();
                 if (id != null && tracks.TryGetValue(id, out var track))
                 {
-                    filteredTracks.Add(track);
+                    yield return track;
                 }
             }
-
-            return filteredTracks;
         }
+
+        private static void OpenEditorAndWait(string filePath)
+        {
+            Console.WriteLine("Choose tracks to add and press ENTER key to continue...");
+            Extensions.Start(filePath);
+            Console.ReadLine();
+        }
+
+        private FileStream CreateFile(string path)
+        {
+            return new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.ReadWrite, 4096, FileOptions.DeleteOnClose);
+        }
+    }
+
+    internal interface IModerator<T>
+    {
+        public IAsyncEnumerable<T> ModerateAsync(IAsyncEnumerable<T> inputTracks);
     }
 }

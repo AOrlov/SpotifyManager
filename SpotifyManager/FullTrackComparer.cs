@@ -6,7 +6,7 @@ namespace SpotifyManager
     // ReSharper disable once ClassNeverInstantiated.Global
     internal sealed class FullTrackComparer : IEqualityComparer<FullTrack>
     {
-        public static FullTrackComparer Instance { get; } = new FullTrackComparer();
+        public static FullTrackComparer Instance { get; } = new();
 
         private FullTrackComparer()
         {
@@ -19,7 +19,7 @@ namespace SpotifyManager
 
         public int GetHashCode(FullTrack obj)
         {
-            return obj.GetHashCode();
+            return obj.Id.GetHashCode();
         }
     }
 }

@@ -17,7 +17,7 @@ namespace SpotifyManager
 
         public async Task<string> Auth()
         {
-            _server = new EmbedIOAuthServer(new Uri("http://localhost:5000/callback"), 5000);
+            _server = new EmbedIOAuthServer(new Uri("http://localhost:5001/callback"), 5001);
             await _server.Start();
 
             _server.ImplictGrantReceived += OnImplicitGrantReceived;
